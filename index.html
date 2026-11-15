@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ServiceTrack - Sistem Pencatatan Servis</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Supabase JS SDK v2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
+
+  <!-- ================= TOP HEADER BAR ================= -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <!-- App Brand & Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-bold text-slate-900 tracking-tight leading-tight">ServiceTrack</h1>
+            <span class="text-[10px] font-semibold uppercase tracking-wider bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-200/60">SKPL_07</span>
+          </div>
+          <p class="text-xs text-slate-500">Sistem Manajemen Penerimaan & Pelacakan Status Servis</p>
+        </div>
+      </div>
+
+      <!-- Database Status Badge -->
+      <div id="connectionStatusContainer" class="flex items-center gap-2">
+        <div id="statusBadge" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200 transition-all">
+          <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+          <span id="statusBadgeText">Memeriksa Koneksi...</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= NOTICE BANNER (FALLBACK LOCALSTORAGE) ================= -->
+  <div id="fallbackNotice" class="hidden bg-gradient-to-r from-amber-50 via-amber-100 to-amber-50 border-b border-amber-200/80 px-4 py-2.5">
+    <div class="max-w-7xl mx-auto flex items-center justify-between text-xs text-amber-900 gap-3">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span>
+          <strong>Mode Demo Lokal Aktif (localStorage):</strong> Supabase URL masih menggunakan template placeholder. Seluruh fitur CRUD, kalkulasi, pengujian <code class="bg-amber-200/60 px-1 rounded font-mono">TC-01</code>, <code class="bg-amber-200/60 px-1 rounded font-mono">TC-02</code>, dan <code class="bg-amber-200/60 px-1 rounded font-mono">SEC-01</code> tetap berfungsi normal untuk presentasi & demo workshop!
+        </span>
+      </div>
+      <button onclick="document.getElementById('fallbackNotice').classList.add('hidden')" class="text-amber-700 hover:text-amber-950 text-sm font-bold px-2 py-0.5 rounded">&times;</button>
+    </div>
+  </div>
+
+  <!-- ================= MAIN CONTENT CONTAINER ================= -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+    <!-- 1. SUMMARY / KPI CARDS (3 KARTU DINAMIS) -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <!-- Card 1: Total Servis -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Servis Terdaftar</p>
+          <h3 id="kpiTotalServis" class="text-2xl font-bold text-slate-900 tracking-tight">0 Unit</h3>
+          <p class="text-[11px] text-slate-400 mt-1">Akumulasi seluruh transaksi</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Card 2: Servis Aktif / Dalam Proses -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Dalam Proses (Aktif)</p>
+          <h3 id="kpiServisAktif" class="text-2xl font-bold text-amber-600 tracking-tight">0 Unit</h3>
+          <p class="text-[11px] text-slate-400 mt-1">Diterima, Diperiksa & Diproses</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Card 3: Total Biaya Servis Selesai (Rupiah) -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Pendapatan Servis</p>
+          <h3 id="kpiTotalBiaya" class="text-2xl font-bold text-emerald-600 tracking-tight">Rp 0</h3>
+          <p class="text-[11px] text-slate-400 mt-1">Biaya status Selesai & Diambil</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. MAIN SPLIT LAYOUT (FORM KIRI & TABEL KANAN) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- ================= KOLOM KIRI: FORM INPUT & VALIDASI ================= -->
+      <section class="lg:col-span-5 flex flex-col gap-4">
+        
+        <!-- PANEL UJI CEPAT SKPL (QA & SECURITY HELPER BAR) -->
+        <div class="bg-white border border-indigo-100 rounded-xl p-4 shadow-xs">
+          <div class="flex items-center justify-between mb-2.5">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+              </svg>
+              Panel Uji Cepat SKPL (QA & Security Mode)
+            </span>
+            <span class="text-[10px] bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-full border border-indigo-200">1-Klik Otomatis</span>
+          </div>
+          <p class="text-xs text-slate-500 mb-3">Klik tombol uji di bawah untuk mengisi formulir dengan payload pengujian SKPL secara instan:</p>
+          <div class="grid grid-cols-1 gap-2">
+            <button type="button" id="btnTestTC01" class="text-left text-xs font-medium px-3 py-2 bg-slate-50 hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-slate-200 hover:border-rose-300 rounded-lg transition-all flex items-center justify-between">
+              <span>⚠️ <strong>Uji TC-01</strong> (Input -50000 & Validasi)</span>
+              <span class="text-[10px] text-rose-600 bg-rose-100/70 px-1.5 py-0.5 rounded">Uji Negatif</span>
+            </button>
+            <button type="button" id="btnTestTC02" class="text-left text-xs font-medium px-3 py-2 bg-slate-50 hover:bg-emerald-50 text-emerald-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded-lg transition-all flex items-center justify-between">
+              <span>✅ <strong>Uji TC-02</strong> (Input Valid Selesai Rp 150.000 / 20.000)</span>
+              <span class="text-[10px] text-emerald-600 bg-emerald-100/70 px-1.5 py-0.5 rounded">Uji Positif</span>
+            </button>
+            <button type="button" id="btnTestSEC01" class="text-left text-xs font-medium px-3 py-2 bg-slate-50 hover:bg-amber-50 text-amber-800 hover:text-amber-900 border border-slate-200 hover:border-amber-300 rounded-lg transition-all flex items-center justify-between">
+              <span>🛡️ <strong>Uji SEC-01</strong> (Payload XSS &lt;img src=x onerror=...&gt;)</span>
+              <span class="text-[10px] text-amber-700 bg-amber-100/70 px-1.5 py-0.5 rounded">Anti-XSS</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- FORM CARD TRANSAKSI -->
+        <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+            <div>
+              <h2 id="formTitle" class="text-base font-bold text-slate-900">Form Transaksi Servis</h2>
+              <p id="formSubtitle" class="text-xs text-slate-500">Pencatatan penerimaan barang dan update status</p>
+            </div>
+            <span id="badgeEditMode" class="hidden text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 px-2 py-0.5 rounded">Mode Edit</span>
+          </div>
+
+          <!-- Alert Error Box (Khusus Uji TC-01 / Validasi Gagal) -->
+          <div id="errorAlert" class="hidden flex items-start gap-3 p-3.5 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm">
+            <svg class="w-5 h-5 text-rose-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="flex-1">
+              <span class="font-bold block text-rose-900 text-xs uppercase tracking-wide">Peringatan Validasi:</span>
+              <span id="errorMessage" class="text-rose-700 font-semibold text-xs"></span>
+            </div>
+          </div>
+
+          <!-- Alert Sukses Box -->
+          <div id="successAlert" class="hidden flex items-center gap-2.5 p-3 mb-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span id="successMessage">Data transaksi berhasil disimpan!</span>
+          </div>
+
+          <form id="serviceForm" class="space-y-4">
+            <!-- Hidden Input for Edit ID -->
+            <input type="hidden" id="editId" value="">
+
+            <!-- 1. No Servis -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label for="no_servis" class="block text-xs font-semibold text-slate-700">Nomor Servis (Unique)</label>
+                <button type="button" id="btnAutoNoServis" class="text-[11px] font-medium text-indigo-600 hover:text-indigo-800">Auto Generate</button>
+              </div>
+              <input type="text" id="no_servis" name="no_servis" placeholder="Contoh: SRV-2026-001" 
+                class="w-full px-3 py-2 text-xs font-mono font-semibold bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+            </div>
+
+            <!-- 2. Nama Pelanggan -->
+            <div>
+              <label for="nama_pelanggan" class="block text-xs font-semibold text-slate-700 mb-1">Nama Pelanggan <span class="text-rose-500">*</span></label>
+              <input type="text" id="nama_pelanggan" name="nama_pelanggan" placeholder="Contoh: Budi Santoso" 
+                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+            </div>
+
+            <!-- 3. Nama Barang -->
+            <div>
+              <label for="nama_barang" class="block text-xs font-semibold text-slate-700 mb-1">Nama Barang / Perangkat <span class="text-rose-500">*</span></label>
+              <input type="text" id="nama_barang" name="nama_barang" placeholder="Contoh: Laptop ASUS ROG G513 / iPhone 13" 
+                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+            </div>
+
+            <!-- 4. Status Servis -->
+            <div>
+              <label for="status" class="block text-xs font-semibold text-slate-700 mb-1">Status Pengerjaan</label>
+              <select id="status" name="status" 
+                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+                <option value="Diterima">Diterima (Unit Masuk)</option>
+                <option value="Diperiksa">Diperiksa (Pengecekan Teknis)</option>
+                <option value="Diproses">Diproses (Sedang Diperbaiki)</option>
+                <option value="Selesai">Selesai (Siap Diambil)</option>
+                <option value="Diambil">Diambil (Telah Diserahkan)</option>
+              </select>
+            </div>
+
+            <!-- 5. Biaya Akhir / Nominal (PERHATIAN: TIDAK MENGGUNAKAN min="1" SUPAYA BISA UJI INPUT -50000) -->
+            <div>
+              <label for="biaya_akhir" class="block text-xs font-semibold text-slate-700 mb-1">
+                Biaya Akhir / Nominal (Rp) <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative rounded-lg">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs font-semibold text-slate-400">
+                  Rp
+                </div>
+                <!-- JANGAN MENAMBAHKAN min="0" atau min="1" agar input negatif dapat diketik untuk memicu pengujian TC-01 -->
+                <input type="number" id="biaya_akhir" name="biaya_akhir" step="1000" placeholder="0" 
+                  class="w-full pl-9 pr-3 py-2 text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1">Biaya perbaikan (masukkan angka bulat, contoh: 150000 atau 20000)</p>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="pt-2 flex items-center gap-2">
+              <button type="submit" id="btnSubmit" 
+                class="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2">
+                <svg id="submitSpinner" class="hidden w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <span id="btnSubmitText">Simpan Transaksi</span>
+              </button>
+
+              <button type="button" id="btnCancelEdit" 
+                class="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-all">
+                Reset
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ================= KOLOM KANAN: TABEL DATA, PENCARIAN & FILTER ================= -->
+      <section class="lg:col-span-7 flex flex-col gap-4">
+        <div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col h-full">
+          
+          <!-- Table Toolbar: Search Bar & Filter Dropdown -->
+          <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50/50">
+            <!-- Search Box -->
+            <div class="relative flex-1">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+              </div>
+              <input type="text" id="searchInput" placeholder="Cari nomor servis, pelanggan, barang..." 
+                class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+            </div>
+
+            <!-- Filter Status Dropdown -->
+            <div class="sm:w-48">
+              <select id="statusFilter" 
+                class="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-medium text-slate-700">
+                <option value="ALL">Semua Status</option>
+                <option value="Diterima">Diterima</option>
+                <option value="Diperiksa">Diperiksa</option>
+                <option value="Diproses">Diproses</option>
+                <option value="Selesai">Selesai</option>
+                <option value="Diambil">Diambil</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Responsive Data Table -->
+          <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <th class="px-4 py-3">No Servis</th>
+                  <th class="px-4 py-3">Pelanggan</th>
+                  <th class="px-4 py-3">Barang / Unit</th>
+                  <th class="px-4 py-3">Status</th>
+                  <th class="px-4 py-3">Biaya Akhir</th>
+                  <th class="px-4 py-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="servicesTableBody" class="divide-y divide-slate-100 text-xs">
+                <!-- Baris tabel dirender secara aman melalui fungsi createSafeTransactionRow -->
+              </tbody>
+            </table>
+
+            <!-- Empty State UI -->
+            <div id="emptyState" class="hidden py-12 px-4 text-center">
+              <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                </svg>
+              </div>
+              <h4 class="text-xs font-bold text-slate-800 mb-1">Belum Ada Data Transaksi Servis</h4>
+              <p class="text-[11px] text-slate-500 max-w-sm mx-auto">
+                Silakan tambah servis baru melalui formulir atau sesuaikan filter pencarian Anda.
+              </p>
+            </div>
+          </div>
+
+          <!-- Table Footer / Count Info -->
+          <div class="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[11px] text-slate-500">
+            <span id="filteredCountInfo">Menampilkan 0 data transaksi</span>
+            <span class="text-slate-400">Tabel: <code class="font-mono text-indigo-600">public.services</code></span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <span>ServiceTrack &copy; 2026 - Modul Implementasi SKPL Sistem Pencatatan Servis</span>
+      <span class="text-[11px] text-slate-400">Anti-XSS (<code class="text-slate-600 font-mono">SEC-01</code>) & RLS Secured (<code class="text-slate-600 font-mono">SEC-02</code>)</span>
+    </div>
+  </footer>
+
+  <!-- ================= JAVASCRIPT LOGIC & SUPABASE INTEGRATION ================= -->
+  <script>
+    /*
+      ===================================================================
+      KONFIGURASI KONEKSI SUPABASE & DETEKSI FALLBACK CERDAS
+      ===================================================================
+    */
+    const SUPABASE_URL = 'GANTI_DENGAN_SUPABASE_URL_ANDA';
+    const SUPABASE_ANON_KEY = 'GANTI_DENGAN_SUPABASE_ANON_KEY_ANDA';
+
+    // State Aplikasi
+    let isCloudMode = false;
+    let supabaseClient = null;
+    let servicesCache = [];
+
+    // Deteksi apakah user sudah memasang kredensial Supabase yang valid
+    function checkSupabaseConfig() {
+      if (
+        SUPABASE_URL && 
+        SUPABASE_URL.startsWith('https://') && 
+        SUPABASE_URL.includes('.supabase.co') && 
+        SUPABASE_ANON_KEY && 
+        !SUPABASE_ANON_KEY.includes('GANTI_DENGAN')
+      ) {
+        try {
+          supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          isCloudMode = true;
+          updateStatusBadge('Cloud Supabase Active', 'emerald');
+          document.getElementById('fallbackNotice').classList.add('hidden');
+          console.log('[ServiceTrack] Terkoneksi ke Cloud Supabase:', SUPABASE_URL);
+        } catch (e) {
+          console.error('[ServiceTrack] Gagal inisialisasi Supabase client:', e);
+          enableLocalFallback();
+        }
+      } else {
+        enableLocalFallback();
+      }
+    }
+
+    function enableLocalFallback() {
+      isCloudMode = false;
+      supabaseClient = null;
+      updateStatusBadge('Local Demo Mode', 'amber');
+      document.getElementById('fallbackNotice').classList.remove('hidden');
+      console.warn('[ServiceTrack] Berjalan dalam Local Demo Mode (localStorage).');
+      seedLocalStorageIfEmpty();
+    }
+
+    function updateStatusBadge(text, color) {
+      const badge = document.getElementById('statusBadge');
+      const badgeText = document.getElementById('statusBadgeText');
+      badgeText.textContent = text;
+      
+      if (color === 'emerald') {
+        badge.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200';
+        badge.firstElementChild.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+      } else {
+        badge.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border bg-amber-50 text-amber-700 border-amber-200';
+        badge.firstElementChild.className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
+      }
+    }
+
+    // Seed Data Awal Realistis (Sesuai DDL & TC-01) untuk LocalStorage
+    function seedLocalStorageIfEmpty() {
+      const existing = localStorage.getItem('servicetrack_services');
+      if (!existing || JSON.parse(existing).length === 0) {
+        const dummyData = [
+          {
+            id: 1,
+            no_servis: 'SRV-2026-001',
+            nama_pelanggan: 'Budi Santoso',
+            nama_barang: 'Laptop ASUS ROG G513',
+            status: 'Diproses',
+            biaya_akhir: 0
+          },
+          {
+            id: 2,
+            no_servis: 'SRV-2026-002',
+            nama_pelanggan: 'Siti Aminah',
+            nama_barang: 'Printer Epson L3110',
+            status: 'Selesai',
+            biaya_akhir: 150000
+          },
+          {
+            id: 3,
+            no_servis: 'SRV-2026-003',
+            nama_pelanggan: 'Rian Pratama',
+            nama_barang: 'Monitor LG 24MK600',
+            status: 'Diterima',
+            biaya_akhir: 0
+          }
+        ];
+        localStorage.setItem('servicetrack_services', JSON.stringify(dummyData));
+      }
+    }
+
+    /*
+      ===================================================================
+      FUNGSI FORMAT & SECURITY UTILITIES
+      ===================================================================
+    */
+    // Format Mata Uang Indonesia (Rupiah)
+    function formatRupiah(number) {
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(number || 0);
+    }
+
+    // Generator Nomor Servis Unik
+    function generateNoServis() {
+      const year = new Date().getFullYear();
+      const randomPart = Math.floor(100 + Math.random() * 900);
+      return `SRV-${year}-${randomPart}`;
+    }
+
+    // Kelas Warna Badge Status Pengerjaan (DESIGN.md)
+    function getStatusBadgeClass(status) {
+      switch (status) {
+        case 'Diterima':
+          return 'bg-slate-100 text-slate-700 border-slate-200';
+        case 'Diperiksa':
+          return 'bg-amber-50 text-amber-700 border-amber-200';
+        case 'Diproses':
+          return 'bg-sky-50 text-sky-700 border-sky-200';
+        case 'Selesai':
+          return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        case 'Diambil':
+          return 'bg-purple-50 text-purple-700 border-purple-200';
+        default:
+          return 'bg-slate-100 text-slate-700 border-slate-200';
+      }
+    }
+
+    // Alert Banner Handlers
+    function showErrorAlert(message) {
+      const alertBox = document.getElementById('errorAlert');
+      const errorMsg = document.getElementById('errorMessage');
+      errorMsg.textContent = message;
+      alertBox.classList.remove('hidden');
+      document.getElementById('successAlert').classList.add('hidden');
+      alertBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function hideErrorAlert() {
+      document.getElementById('errorAlert').classList.add('hidden');
+    }
+
+    function showSuccessAlert(message) {
+      const alertBox = document.getElementById('successAlert');
+      const successMsg = document.getElementById('successMessage');
+      successMsg.textContent = message;
+      alertBox.classList.remove('hidden');
+      hideErrorAlert();
+      setTimeout(() => alertBox.classList.add('hidden'), 4000);
+    }
+
+    /*
+      ===================================================================
+      SEC-01: IMPLEMENTASI MUTLAK ANTI-XSS PADA RENDER ROW
+      Dilarang keras menyisipkan data mentah ke .innerHTML!
+      Wajib menggunakan document.createElement & .textContent murni.
+      ===================================================================
+    */
+    function createSafeTransactionRow(item) {
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-slate-50/80 transition-colors border-b border-slate-100';
+
+      // 1. Kolom No Servis (Monospace)
+      const tdNoServis = document.createElement('td');
+      tdNoServis.className = 'px-4 py-3 font-mono text-xs font-bold text-slate-800 whitespace-nowrap';
+      tdNoServis.textContent = item.no_servis || '-';
+      tr.appendChild(tdNoServis);
+
+      // 2. Kolom Nama Pelanggan (Anti-XSS via .textContent)
+      const tdPelanggan = document.createElement('td');
+      tdPelanggan.className = 'px-4 py-3 text-xs font-semibold text-slate-900';
+      tdPelanggan.textContent = item.nama_pelanggan || '-';
+      tr.appendChild(tdPelanggan);
+
+      // 3. Kolom Nama Barang (Anti-XSS via .textContent)
+      const tdBarang = document.createElement('td');
+      tdBarang.className = 'px-4 py-3 text-xs text-slate-600';
+      tdBarang.textContent = item.nama_barang || '-';
+      tr.appendChild(tdBarang);
+
+      // 4. Kolom Status Badge
+      const tdStatus = document.createElement('td');
+      tdStatus.className = 'px-4 py-3 whitespace-nowrap';
+      const badge = document.createElement('span');
+      badge.className = `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusBadgeClass(item.status)}`;
+      badge.textContent = item.status;
+      tdStatus.appendChild(badge);
+      tr.appendChild(tdStatus);
+
+      // 5. Kolom Biaya Akhir / Nominal
+      const tdBiaya = document.createElement('td');
+      tdBiaya.className = 'px-4 py-3 text-xs font-bold text-slate-900 whitespace-nowrap';
+      tdBiaya.textContent = formatRupiah(item.biaya_akhir);
+      tr.appendChild(tdBiaya);
+
+      // 6. Kolom Aksi (Edit & Hapus)
+      const tdAksi = document.createElement('td');
+      tdAksi.className = 'px-4 py-3 text-xs text-right whitespace-nowrap';
+
+      // Tombol Edit
+      const btnEdit = document.createElement('button');
+      btnEdit.type = 'button';
+      btnEdit.className = 'inline-flex items-center p-1.5 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded-lg transition-colors mr-1';
+      btnEdit.title = 'Edit Data';
+      btnEdit.innerHTML = `
+        <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+        </svg>
+      `;
+      btnEdit.addEventListener('click', () => loadItemIntoForm(item));
+      tdAksi.appendChild(btnEdit);
+
+      // Tombol Hapus
+      const btnDelete = document.createElement('button');
+      btnDelete.type = 'button';
+      btnDelete.className = 'inline-flex items-center p-1.5 text-rose-600 hover:text-rose-900 hover:bg-rose-50 rounded-lg transition-colors';
+      btnDelete.title = 'Hapus Data';
+      btnDelete.innerHTML = `
+        <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      `;
+      btnDelete.addEventListener('click', () => confirmAndDeleteItem(item.id, item.no_servis, item.nama_pelanggan));
+      tdAksi.appendChild(btnDelete);
+
+      tr.appendChild(tdAksi);
+      return tr;
+    }
+
+    /*
+      ===================================================================
+      OPERASI CRUD (SUPABASE CLOUD & LOCALSTORAGE FALLBACK)
+      ===================================================================
+    */
+    // 1. Fetch & Read Data
+    async function fetchServices() {
+      try {
+        if (isCloudMode && supabaseClient) {
+          const { data, error } = await supabaseClient
+            .from('services')
+            .select('*')
+            .order('id', { ascending: false });
+
+          if (error) throw error;
+          servicesCache = data || [];
+        } else {
+          const raw = localStorage.getItem('servicetrack_services');
+          servicesCache = raw ? JSON.parse(raw) : [];
+          servicesCache.sort((a, b) => b.id - a.id);
+        }
+
+        renderServicesTable();
+        calculateKpis();
+      } catch (err) {
+        console.error('[ServiceTrack] Gagal mengambil data servis:', err);
+        showErrorAlert('Gagal mengambil data dari database: ' + err.message);
+      }
+    }
+
+    // 2. Render Tabel dengan Search & Filter
+    function renderServicesTable() {
+      const tbody = document.getElementById('servicesTableBody');
+      const emptyState = document.getElementById('emptyState');
+      const searchVal = document.getElementById('searchInput').value.trim().toLowerCase();
+      const statusVal = document.getElementById('statusFilter').value;
+
+      tbody.innerHTML = '';
+
+      const filtered = servicesCache.filter(item => {
+        const matchSearch = 
+          (item.no_servis && item.no_servis.toLowerCase().includes(searchVal)) ||
+          (item.nama_pelanggan && item.nama_pelanggan.toLowerCase().includes(searchVal)) ||
+          (item.nama_barang && item.nama_barang.toLowerCase().includes(searchVal));
+
+        const matchStatus = statusVal === 'ALL' || item.status === statusVal;
+
+        return matchSearch && matchStatus;
+      });
+
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        filtered.forEach(item => {
+          const rowElement = createSafeTransactionRow(item);
+          tbody.appendChild(rowElement);
+        });
+      }
+
+      document.getElementById('filteredCountInfo').textContent = 
+        `Menampilkan ${filtered.length} dari ${servicesCache.length} data transaksi`;
+    }
+
+    // 3. Hitung Ulang Kartu Ringkasan (KPI)
+    function calculateKpis() {
+      const totalCount = servicesCache.length;
+      
+      // Servis Aktif (Diterima, Diperiksa, Diproses)
+      const aktifCount = servicesCache.filter(s => 
+        ['Diterima', 'Diperiksa', 'Diproses'].includes(s.status)
+      ).length;
+
+      // Total Pendapatan dari servis yang Selesai / Diambil
+      const totalPendapatan = servicesCache
+        .filter(s => ['Selesai', 'Diambil'].includes(s.status))
+        .reduce((sum, item) => sum + (parseFloat(item.biaya_akhir) || 0), 0);
+
+      document.getElementById('kpiTotalServis').textContent = `${totalCount} Unit`;
+      document.getElementById('kpiServisAktif').textContent = `${aktifCount} Unit`;
+      document.getElementById('kpiTotalBiaya').textContent = formatRupiah(totalPendapatan);
+    }
+
+    // 4. Save / Update Form Handler (Menerapkan TC-01 & TC-02)
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      hideErrorAlert();
+
+      const editId = document.getElementById('editId').value;
+      const no_servis = document.getElementById('no_servis').value.trim();
+      const nama_pelanggan = document.getElementById('nama_pelanggan').value.trim();
+      const nama_barang = document.getElementById('nama_barang').value.trim();
+      const status = document.getElementById('status').value;
+      const rawBiaya = document.getElementById('biaya_akhir').value.trim();
+      const parsedBiaya = parseFloat(rawBiaya);
+
+      // ===================================================================
+      // VALIDASI LOGIKA KETAT (TC-01 & TC-02 SESUAI SKPL)
+      // ===================================================================
+      if (!no_servis || !nama_pelanggan || !nama_barang) {
+        showErrorAlert("Nomor servis, nama pelanggan, dan nama barang wajib diisi.");
+        return;
+      }
+
+      // Pemeriksaan Black Box: Nominal tidak boleh <= 0 atau isNaN
+      if (rawBiaya === '' || isNaN(parsedBiaya) || parsedBiaya <= 0) {
+        showErrorAlert("Nominal harus lebih dari 0");
+        return;
+      }
+
+      // Validasi Nilai Status Sesuai ENUM SKPL Modul 2
+      const validStatuses = ['Diterima', 'Diperiksa', 'Diproses', 'Selesai', 'Diambil'];
+      if (!validStatuses.includes(status)) {
+        showErrorAlert("Status pengerjaan servis tidak valid.");
+        return;
+      }
+
+      setSubmitLoading(true);
+
+      const payload = {
+        no_servis: no_servis,
+        nama_pelanggan: nama_pelanggan,
+        nama_barang: nama_barang,
+        status: status,
+        biaya_akhir: parsedBiaya
+      };
+
+      try {
+        if (isCloudMode && supabaseClient) {
+          if (editId) {
+            // Operasi UPDATE ke Supabase
+            const { error } = await supabaseClient
+              .from('services')
+              .update(payload)
+              .eq('id', editId);
+            if (error) throw error;
+            showSuccessAlert(`Data servis ${no_servis} berhasil diperbarui.`);
+          } else {
+            // Operasi INSERT ke Supabase
+            const { error } = await supabaseClient
+              .from('services')
+              .insert([payload]);
+            if (error) throw error;
+            showSuccessAlert(`Data servis baru ${no_servis} berhasil disimpan.`);
+          }
+        } else {
+          // Operasi Penyimpanan LocalStorage Fallback
+          let list = JSON.parse(localStorage.getItem('servicetrack_services') || '[]');
+          if (editId) {
+            list = list.map(item => item.id == editId ? { ...item, ...payload } : item);
+            showSuccessAlert(`[Demo Mode] Data servis ${no_servis} berhasil diperbarui.`);
+          } else {
+            const newId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
+            list.unshift({ id: newId, ...payload });
+            showSuccessAlert(`[Demo Mode] Data servis baru ${no_servis} berhasil disimpan.`);
+          }
+          localStorage.setItem('servicetrack_services', JSON.stringify(list));
+        }
+
+        resetForm();
+        await fetchServices();
+      } catch (err) {
+        console.error('[ServiceTrack] Gagal menyimpan transaksi:', err);
+        showErrorAlert('Gagal menyimpan ke database: ' + (err.message || 'Error tidak diketahui'));
+      } finally {
+        setSubmitLoading(false);
+      }
+    }
+
+    // 5. Muat Data ke Form untuk Update (Edit Mode)
+    function loadItemIntoForm(item) {
+      hideErrorAlert();
+      document.getElementById('editId').value = item.id;
+      document.getElementById('no_servis').value = item.no_servis;
+      document.getElementById('nama_pelanggan').value = item.nama_pelanggan;
+      document.getElementById('nama_barang').value = item.nama_barang;
+      document.getElementById('status').value = item.status;
+      document.getElementById('biaya_akhir').value = item.biaya_akhir;
+
+      // Update Label Form
+      document.getElementById('formTitle').textContent = 'Edit Data Transaksi Servis';
+      document.getElementById('formSubtitle').textContent = `Memperbarui ID: ${item.id} (${item.no_servis})`;
+      document.getElementById('btnSubmitText').textContent = 'Perbarui Transaksi';
+      document.getElementById('badgeEditMode').classList.remove('hidden');
+
+      document.getElementById('serviceForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // 6. Konfirmasi & Hapus Data (Delete Operation)
+    async function confirmAndDeleteItem(id, no_servis, nama_pelanggan) {
+      const confirmed = confirm(`Apakah Anda yakin ingin menghapus data servis ${no_servis} atas nama pelanggan "${nama_pelanggan}"?`);
+      if (!confirmed) return;
+
+      try {
+        if (isCloudMode && supabaseClient) {
+          const { error } = await supabaseClient
+            .from('services')
+            .delete()
+            .eq('id', id);
+          if (error) throw error;
+        } else {
+          let list = JSON.parse(localStorage.getItem('servicetrack_services') || '[]');
+          list = list.filter(item => item.id !== id);
+          localStorage.setItem('servicetrack_services', JSON.stringify(list));
+        }
+
+        showSuccessAlert(`Data transaksi ${no_servis} telah dihapus.`);
+        if (document.getElementById('editId').value == id) {
+          resetForm();
+        }
+        await fetchServices();
+      } catch (err) {
+        console.error('[ServiceTrack] Gagal menghapus:', err);
+        showErrorAlert('Gagal menghapus data: ' + err.message);
+      }
+    }
+
+    // 7. Reset Form ke Default
+    function resetForm() {
+      document.getElementById('serviceForm').reset();
+      document.getElementById('editId').value = '';
+      document.getElementById('no_servis').value = generateNoServis();
+      document.getElementById('biaya_akhir').value = '';
+      document.getElementById('status').value = 'Diterima';
+
+      document.getElementById('formTitle').textContent = 'Form Transaksi Servis';
+      document.getElementById('formSubtitle').textContent = 'Pencatatan penerimaan barang dan update status';
+      document.getElementById('btnSubmitText').textContent = 'Simpan Transaksi';
+      document.getElementById('badgeEditMode').classList.add('hidden');
+      hideErrorAlert();
+    }
+
+    function setSubmitLoading(isLoading) {
+      const btn = document.getElementById('btnSubmit');
+      const spinner = document.getElementById('submitSpinner');
+      const text = document.getElementById('btnSubmitText');
+
+      if (isLoading) {
+        btn.disabled = true;
+        btn.classList.add('opacity-75', 'cursor-not-allowed');
+        spinner.classList.remove('hidden');
+        text.textContent = 'Memproses...';
+      } else {
+        btn.disabled = false;
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
+        spinner.classList.add('hidden');
+        text.textContent = document.getElementById('editId').value ? 'Perbarui Transaksi' : 'Simpan Transaksi';
+      }
+    }
+
+    /*
+      ===================================================================
+      SIMULASI PANEL UJI CEPAT SKPL (QA & SECURITY TEST HANDLERS)
+      ===================================================================
+    */
+    // Uji TC-01: Masukkan angka negatif (-50000) untuk membuktikan validasi menolaknya
+    document.getElementById('btnTestTC01').addEventListener('click', () => {
+      resetForm();
+      document.getElementById('no_servis').value = 'SRV-TEST-NEG';
+      document.getElementById('nama_pelanggan').value = 'Pengujian Negatif QA';
+      document.getElementById('nama_barang').value = 'Laptop Asus (Uji TC-01)';
+      document.getElementById('status').value = 'Diproses';
+      document.getElementById('biaya_akhir').value = '-50000'; // Input negatif
+      
+      showErrorAlert('Data uji coba TC-01 terpasang. Klik tombol "Simpan Transaksi" untuk memverifikasi penolakan sistem.');
+    });
+
+    // Uji TC-02: Masukkan data valid sesuai modul SKPL (+150000 / +20000)
+    document.getElementById('btnTestTC02').addEventListener('click', () => {
+      resetForm();
+      document.getElementById('no_servis').value = generateNoServis();
+      document.getElementById('nama_pelanggan').value = 'Siti Rahmawati';
+      document.getElementById('nama_barang').value = 'Printer Canon MP287';
+      document.getElementById('status').value = 'Selesai';
+      document.getElementById('biaya_akhir').value = '150000'; // Input valid positif
+      
+      hideErrorAlert();
+      showSuccessAlert('Data valid TC-02 berhasil diisi. Klik "Simpan Transaksi" untuk menyimpan.');
+    });
+
+    // Uji SEC-01: Masukkan payload serangan script XSS
+    document.getElementById('btnTestSEC01').addEventListener('click', () => {
+      resetForm();
+      document.getElementById('no_servis').value = 'SRV-SEC-XSS';
+      document.getElementById('nama_pelanggan').value = `<img src=x onerror=alert('Jebol_XSS_Pelanggan!')>`;
+      document.getElementById('nama_barang').value = `<img src=x onerror=alert('Jebol_XSS_Barang!')>`;
+      document.getElementById('status').value = 'Diproses';
+      document.getElementById('biaya_akhir').value = '75000';
+      
+      hideErrorAlert();
+      showSuccessAlert('Payload SEC-01 terpasang. Simpan dan perhatikan tabel: skrip tidak tereksekusi berkat textContent rendering!');
+    });
+
+    // Button Auto Generate No Servis
+    document.getElementById('btnAutoNoServis').addEventListener('click', () => {
+      document.getElementById('no_servis').value = generateNoServis();
+    });
+
+    // Button Cancel / Reset
+    document.getElementById('btnCancelEdit').addEventListener('click', resetForm);
+
+    // Form Submit Event
+    document.getElementById('serviceForm').addEventListener('submit', handleFormSubmit);
+
+    // Real-time Search & Filter Events
+    document.getElementById('searchInput').addEventListener('input', renderServicesTable);
+    document.getElementById('statusFilter').addEventListener('change', renderServicesTable);
+
+    /*
+      ===================================================================
+      INISIALISASI APLIKASI SAAT HALAMAN DIMUAT
+      ===================================================================
+    */
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('no_servis').value = generateNoServis();
+      checkSupabaseConfig();
+      fetchServices();
+    });
+  </script>
+</body>
+</html>
